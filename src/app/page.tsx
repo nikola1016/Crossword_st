@@ -25,8 +25,8 @@ interface GameState {
   currentGame: 'crossword' | 'connectFour';
   crossword: {
     gridState: string[][];
-    activeDirection: 'Хоризонтални' | 'Вертикални'; // Updated type
-    highlightedWord: { number: number; direction: 'Хоризонтални' | 'Вертикални' } | null; // Updated type
+    activeDirection: 'Хоризонтални' | 'Вертикални';
+    highlightedWord: { number: number; direction: 'Хоризонтални' | 'Вертикални' } | null;
   };
   connectFour: {
     selectedWords: string[];
@@ -44,7 +44,6 @@ export default function CrosswordAndConnectFour() {
   // DATA DEFINITIONS
   // -----------------------------------
 
-  // Crossword data: 19x21 grid
   const crosswordData = {
     grid: [
       "####################",
@@ -128,7 +127,6 @@ export default function CrosswordAndConnectFour() {
     },
   };
 
-  // Connect Four data: Categories and words for the game
   const connectFourData = {
     categories: [
       { name: "Предмети", words: ["география", "биология", "музика", "немски"] },
@@ -150,7 +148,7 @@ export default function CrosswordAndConnectFour() {
     currentGame: 'crossword',
     crossword: {
       gridState: initialGridState,
-      activeDirection: 'Хоризонтални', // Changed from 'across'
+      activeDirection: 'Хоризонтални',
       highlightedWord: null,
     },
     connectFour: {
@@ -171,6 +169,7 @@ export default function CrosswordAndConnectFour() {
   const [hintsEnabled, setHintsEnabled] = useState(true);
   const [isPreviousPuzzlesOpen, setIsPreviousPuzzlesOpen] = useState(false);
   const [popupMessage, setPopupMessage] = useState<string | null>(null);
+  const [isTouchDevice, setIsTouchDevice] = useState(false); // Added state for isTouchDevice
 
   const cellRefs = useRef<{
     [key: string]: HTMLInputElement;
@@ -178,6 +177,11 @@ export default function CrosswordAndConnectFour() {
     lastClicked?: string;
     lastClickTime?: number;
   }>({});
+
+  // Set isTouchDevice on client-side mount
+  useEffect(() => {
+    setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0);
+  }, []);
 
   useEffect(() => {
     const savedGameState = localStorage.getItem('gameState');
@@ -242,7 +246,7 @@ export default function CrosswordAndConnectFour() {
     cellRefs.current.lastClicked = currentCell;
     cellRefs.current.lastClickTime = now;
 
-    let direction: 'Хоризонтални' | 'Вертикални'; // Updated type
+    let direction: 'Хоризонтални' | 'Вертикални';
     if (!isSameCell) {
       direction = acrossClue ? 'Хоризонтални' : 'Вертикални';
     } else {
@@ -328,8 +332,6 @@ export default function CrosswordAndConnectFour() {
   // CROSSWORD RENDERING FUNCTIONS
   // -----------------------------------
 
-  const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-
   const renderCrosswordGrid = () => {
     const handleInteraction = (e: React.MouseEvent | React.TouchEvent, row: number, col: number) => {
       e.preventDefault();
@@ -404,7 +406,7 @@ export default function CrosswordAndConnectFour() {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-base mt-4">
         <div>
-          <h3 className="font-bold">Хоризонтални</h3> {/* Changed from "Across" */}
+          <h3 className="font-bold">Хоризонтални</h3>
           {crosswordData.clues.across.map(clue => (
             <div
               key={`across-${clue.number}`}
@@ -420,7 +422,7 @@ export default function CrosswordAndConnectFour() {
           ))}
         </div>
         <div>
-          <h3 className="font-bold">Вертикални</h3> {/* Changed from "Down" */}
+          <h3 className="font-bold">Вертикални</h3>
           {crosswordData.clues.down.map(clue => (
             <div
               key={`down-${clue.number}`}
@@ -494,7 +496,6 @@ export default function CrosswordAndConnectFour() {
 
     return (
       <div className="relative max-w-md mx-auto font-sans">
-        {/* Completed Categories */}
         {gameState.connectFour.completedCategories.map(({ category, words }, index) => (
           <div
             key={index}
@@ -506,7 +507,6 @@ export default function CrosswordAndConnectFour() {
             <div className="text-sm mt-1">{words.join(', ')}</div>
           </div>
         ))}
-        {/* Remaining Words Grid */}
         {gameState.connectFour.remainingWords.length > 0 && (
           <div className="grid grid-cols-4 gap-1">
             {gameState.connectFour.remainingWords.map(({ word }) => (
@@ -522,7 +522,6 @@ export default function CrosswordAndConnectFour() {
             ))}
           </div>
         )}
-        {/* Shuffle Button */}
         <div className="mt-4 text-center">
           <button
             className="px-4 py-2 text-sm font-bold uppercase border border-gray-500 rounded bg-white hover:bg-gray-100 transition-colors select-none"
@@ -531,7 +530,6 @@ export default function CrosswordAndConnectFour() {
             разбъркай
           </button>
         </div>
-        {/* Popup Message */}
         {popupMessage && (
           <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-blue-100 text-blue-800 p-4 rounded shadow-lg text-center font-bold">
             {popupMessage}
@@ -547,20 +545,19 @@ export default function CrosswordAndConnectFour() {
 
   return (
     <div className="bg-white min-h-screen p-4 overflow-y-auto">
-      {/* Navigation Bar */}
       <div className="relative flex mb-4">
         <div className="flex w-full">
           <button
             className={`flex-1 p-2 ${gameState.currentGame === 'crossword' ? 'bg-blue-200' : 'bg-gray-100'} border border-black`}
             onClick={() => setGameState(prev => ({ ...prev, currentGame: 'crossword' }))}
           >
-            Кръстословица {/* Changed from "Crossword" */}
+            Кръстословица
           </button>
           <button
             className={`flex-1 p-2 ${gameState.currentGame === 'connectFour' ? 'bg-blue-200' : 'bg-gray-100'} border border-black`}
             onClick={() => setGameState(prev => ({ ...prev, currentGame: 'connectFour' }))}
           >
-            Connections {/* Changed from "Connect Four" */}
+            Connections
           </button>
         </div>
         <div className="absolute bottom-0 right-0 p-2 z-20">
@@ -649,7 +646,6 @@ export default function CrosswordAndConnectFour() {
         </div>
       </div>
 
-      {/* Game Content */}
       <div className="mt-16">
         {gameState.currentGame === 'crossword' ? (
           <div className="overflow-x-auto max-h-[80vh] overflow-y-auto">
