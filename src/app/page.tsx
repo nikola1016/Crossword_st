@@ -53,7 +53,7 @@ export default function CrosswordAndConnectFour() {
       "#О###ЕКО###Т##Т###В#",
       "#РИД#К####А#Ф#КРЕДА#",
       "#О##ФОТОСИНТЕЗА###Н#",
-      "#Н###С####Д#с##БИРА#",
+      "#Н###С####Д#С##БИРА#",
       "#ЕРУ#И#ПЕКИН#Д#О####",
       "###П#С#А#Р#Р#И#РИЯД#",
       "##ПЛАТОН#И#А#О#Б##И#",
@@ -141,7 +141,7 @@ export default function CrosswordAndConnectFour() {
   // -----------------------------------
 
   const initialGridState = crosswordData.grid.map(row =>
-    row.split('').map(char => (char === '#' ? '#' : ''))
+    row.split('').map(char => (char === '#' ? '#' : '')) || []
   );
 
   const initialGameState: GameState = {
@@ -169,7 +169,7 @@ export default function CrosswordAndConnectFour() {
   const [hintsEnabled, setHintsEnabled] = useState(true);
   const [isPreviousPuzzlesOpen, setIsPreviousPuzzlesOpen] = useState(false);
   const [popupMessage, setPopupMessage] = useState<string | null>(null);
-  const [isTouchDevice, setIsTouchDevice] = useState(false); // Added state for isTouchDevice
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
 
   const cellRefs = useRef<{
     [key: string]: HTMLInputElement;
@@ -178,7 +178,9 @@ export default function CrosswordAndConnectFour() {
     lastClickTime?: number;
   }>({});
 
-  // Set isTouchDevice on client-side mount
+  const [maxBoxHeight, setMaxBoxHeight] = useState<number>(0);
+  const wordRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
+
   useEffect(() => {
     setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0);
   }, []);
@@ -203,6 +205,17 @@ export default function CrosswordAndConnectFour() {
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
   }, [gameState]);
+
+  useEffect(() => {
+    let tallestHeight = 0;
+    Object.values(wordRefs.current).forEach(ref => {
+      if (ref) {
+        const height = ref.getBoundingClientRect().height;
+        if (height > tallestHeight) tallestHeight = height;
+      }
+    });
+    setMaxBoxHeight(tallestHeight);
+  }, [gameState.connectFour.remainingWords, gameState.connectFour.selectedWords]);
 
   // -----------------------------------
   // CROSSWORD HELPER FUNCTIONS
@@ -235,27 +248,27 @@ export default function CrosswordAndConnectFour() {
   const handleCellClick = (row: number, col: number) => {
     const { acrossClue, downClue } = findCluesForCell(row, col);
     if (!acrossClue && !downClue) return;
-
+  
     const currentCell = `${row}-${col}`;
     const isSameCell = cellRefs.current.lastClicked === currentCell;
     const now = Date.now();
     const lastClickTime = cellRefs.current.lastClickTime || 0;
-
+  
     if (now - lastClickTime < 300) return;
-
+  
     cellRefs.current.lastClicked = currentCell;
     cellRefs.current.lastClickTime = now;
-
+  
     let direction: 'Хоризонтални' | 'Вертикални';
     if (!isSameCell) {
       direction = acrossClue ? 'Хоризонтални' : 'Вертикални';
     } else {
       direction = gameState.crossword.activeDirection === 'Хоризонтални' ? 'Вертикални' : 'Хоризонтални';
     }
-
+  
     const clue = direction === 'Хоризонтални' ? acrossClue : downClue;
     if (!clue) return;
-
+  
     setGameState(prev => ({
       ...prev,
       crossword: {
@@ -264,38 +277,70 @@ export default function CrosswordAndConnectFour() {
         highlightedWord: { number: clue.number, direction },
       },
     }));
-
+  
     setCurrentClue(`${clue.number}. ${clue.clue} (${direction === 'Хоризонтални' ? 'Хоризонтални' : 'Вертикални'})`);
-
-    cellRefs.current[`${row}-${col}`]?.focus();
+  
+    const targetCell = cellRefs.current[`${row}-${col}`];
+    if (targetCell) {
+      console.log(`Focusing cell: ${row}-${col}`);
+      setTimeout(() => {
+        targetCell.focus(); // Keep focus, remove scrollIntoView
+      }, 0);
+    } else {
+      console.warn(`No ref found for cell: ${row}-${col}`);
+    }
   };
+// New helper function to find the previous cell
+const findPreviousCell = (row: number, col: number) => {
+  const { acrossClue, downClue } = findCluesForCell(row, col);
+  const currentClue = gameState.crossword.activeDirection === 'Хоризонтални' ? acrossClue : downClue;
+  if (!currentClue) return null;
 
-  const handleCrosswordInput = (
-    e: React.ChangeEvent<HTMLInputElement>,
-    row: number,
-    col: number
-  ) => {
-    const value = e.target.value.toUpperCase();
-    const { acrossClue, downClue } = findCluesForCell(row, col);
-    const currentClue = gameState.crossword.activeDirection === 'Хоризонтални' ? acrossClue : downClue;
+  const start = currentClue.start;
+  let prevRow = row;
+  let prevCol = col;
 
-    if (!currentClue) return;
+  if (gameState.crossword.activeDirection === 'Хоризонтални') {
+    prevCol--;
+    if (prevCol < start.col || crosswordData.grid[row][prevCol] === '#') return null;
+  } else {
+    prevRow--;
+    if (prevRow < start.row || crosswordData.grid[prevRow][col] === '#') return null;
+  }
 
-    const correctChar = crosswordData.grid[row][col];
-    const newGridState = gameState.crossword.gridState.map((r, i) =>
-      i === row ? r.map((c, j) => (j === col ? value : c)) : r
-    );
+  return cellRefs.current[`${prevRow}-${prevCol}`];
+};
 
-    setGameState(prev => ({
-      ...prev,
-      crossword: { ...prev.crossword, gridState: newGridState },
-    }));
+// Updated handleCrosswordInput
+const handleCrosswordInput = (
+  e: React.ChangeEvent<HTMLInputElement>,
+  row: number,
+  col: number
+) => {
+  const value = e.target.value.toUpperCase();
+  const { acrossClue, downClue } = findCluesForCell(row, col);
+  const currentClue = gameState.crossword.activeDirection === 'Хоризонтални' ? acrossClue : downClue;
 
-    e.target.value = value || '';
-    const nextCell = findNextCell(row, col);
-    if (nextCell) nextCell.focus();
-  };
+  if (!currentClue) return;
 
+  const newGridState = gameState.crossword.gridState.map((r, i) =>
+    i === row ? r.map((c, j) => (j === col ? value : c ?? '')) : r
+  );
+
+  setGameState(prev => ({
+    ...prev,
+    crossword: { ...prev.crossword, gridState: newGridState },
+  }));
+
+  e.target.value = value || '';
+  const nextCell = findNextCell(row, col);
+  if (nextCell && value) {
+    console.log(`Moving focus to next cell: ${nextCell.dataset.row}-${nextCell.dataset.col}`);
+    requestAnimationFrame(() => {
+      nextCell.focus(); // Use requestAnimationFrame for smoother transition
+    });
+  }
+};
   const findNextCell = (row: number, col: number) => {
     const { acrossClue, downClue } = findCluesForCell(row, col);
     const currentClue = gameState.crossword.activeDirection === 'Хоризонтални' ? acrossClue : downClue;
@@ -333,70 +378,154 @@ export default function CrosswordAndConnectFour() {
   // -----------------------------------
 
   const renderCrosswordGrid = () => {
-    const handleInteraction = (e: React.MouseEvent | React.TouchEvent, row: number, col: number) => {
+    let touchStartX: number | null = null;
+    let touchStartY: number | null = null;
+    let touchStartTime: number | null = null;
+    const swipeThreshold = 10;
+    const tapTimeThreshold = 300;
+    const maxCols = 20;
+  
+    const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>, row: number, col: number) => {
+      if (e.touches.length > 1) return;
       e.preventDefault();
+      const touch = e.touches[0];
+      touchStartX = touch.clientX;
+      touchStartY = touch.clientY;
+      touchStartTime = Date.now();
+      console.log(`Touch start at ${row}-${col}: (${touchStartX}, ${touchStartY})`);
+    };
+  
+    const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>, row: number, col: number) => {
+      if (touchStartX === null || touchStartY === null) return;
+      const touch = e.touches[0];
+      const deltaX = Math.abs(touch.clientX - touchStartX);
+      const deltaY = Math.abs(touch.clientY - touchStartY);
+      if (deltaX > swipeThreshold || deltaY > swipeThreshold) {
+        console.log(`Swipe detected at ${row}-${col}: (${deltaX}, ${deltaY})`);
+        touchStartX = null;
+        touchStartY = null;
+      }
+    };
+  
+    const handleTouchEnd = (e: React.TouchEvent<HTMLDivElement>, row: number, col: number) => {
+      if (touchStartX === null || touchStartY === null || touchStartTime === null) return;
+      e.preventDefault();
+      const touchTime = Date.now() - touchStartTime;
+      const isBlackCell = crosswordData.grid[row][col] === '#';
+  
+      if (touchTime <= tapTimeThreshold && !isBlackCell) {
+        console.log(`Tap detected at ${row}-${col}, time: ${touchTime}ms`);
+        handleCellClick(row, col);
+      } else {
+        console.log(`Touch too long or invalid at ${row}-${col}: ${touchTime}ms`);
+      }
+  
+      touchStartX = null;
+      touchStartY = null;
+      touchStartTime = null;
+    };
+  
+    const handleClick = (e: React.MouseEvent<HTMLDivElement>, row: number, col: number) => {
+      e.preventDefault();
+      e.stopPropagation();
       const isBlackCell = crosswordData.grid[row][col] === '#';
       if (!isBlackCell) handleCellClick(row, col);
     };
-
+  
     return (
       <div className="flex justify-center">
         <div className="w-full">
-          {crosswordData.grid.map((row, rowIndex) => (
-            <div key={rowIndex} className="flex">
-              {row.split('').map((char, colIndex) => {
-                const isBlackCell = char === '#';
-                const { acrossClue, downClue } = findCluesForCell(rowIndex, colIndex);
-                const isHighlighted = gameState.crossword.highlightedWord && 
-                  ((gameState.crossword.highlightedWord.direction === 'Хоризонтални' && acrossClue?.number === gameState.crossword.highlightedWord.number) ||
-                   (gameState.crossword.highlightedWord.direction === 'Вертикални' && downClue?.number === gameState.crossword.highlightedWord.number));
-                const currentChar = gameState.crossword.gridState[rowIndex][colIndex];
-                const correctChar = crosswordData.grid[rowIndex][colIndex];
-                const isWrong = hintsEnabled && !isBlackCell && currentChar && currentChar !== correctChar && currentChar !== '';
-                const isCorrectLocked = hintsEnabled && !isBlackCell && currentChar === correctChar && currentChar !== '';
-
-                const clueNumber = 
-                  (acrossClue?.start.row === rowIndex && acrossClue?.start.col === colIndex) ? acrossClue.number :
-                  (downClue?.start.row === rowIndex && downClue?.start.col === colIndex) ? downClue.number :
-                  null;
-
-                return (
-                  <div
-                    key={`${rowIndex}-${colIndex}`}
-                    className={`relative w-[4.7619vw] h-[4.7619vw] border border-black flex items-center justify-center ${
-                      isBlackCell ? 'bg-black' : isWrong ? 'bg-red-200' : isHighlighted ? 'bg-yellow-200' : 'bg-white'
-                    }`}
-                    {...(isTouchDevice
-                      ? { onTouchStart: (e) => handleInteraction(e, rowIndex, colIndex) }
-                      : { onClick: (e) => handleInteraction(e, rowIndex, colIndex) })}
-                  >
-                    {!isBlackCell && (
-                      <>
-                        {clueNumber !== null && (
-                          <span className="absolute top-0 left-0 text-[min(0.6vw,12px)] text-gray-600">
-                            {clueNumber}
-                          </span>
-                        )}
-                        <input
-                          type="text"
-                          maxLength={1}
-                          value={currentChar === '#' ? '' : currentChar}
-                          className="w-full h-full text-center uppercase border-none outline-none bg-transparent text-[min(3.5vw,42px)] font-bold caret-transparent"
-                          ref={el => {
-                            if (el) cellRefs.current[`${rowIndex}-${colIndex}`] = el;
-                          }}
-                          onChange={(e) => !isCorrectLocked && handleCrosswordInput(e, rowIndex, colIndex)}
-                          onKeyDown={(e) => !isCorrectLocked && e.currentTarget.select()}
-                          onFocus={(e) => e.target.scrollIntoView({ behavior: 'smooth', block: 'center' })}
-                          disabled={isCorrectLocked}
-                        />
-                      </>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          ))}
+          {crosswordData.grid.map((row, rowIndex) => {
+            const splitRow = row.split('').slice(0, maxCols);
+            console.log(`Row ${rowIndex} length: ${splitRow.length}, expected: ${maxCols}`);
+            if (splitRow.length !== maxCols) {
+              console.warn(`Row ${rowIndex} adjusted: ${splitRow} (original: ${row})`);
+            }
+            return (
+              <div key={rowIndex} className="flex">
+                {splitRow.map((char, colIndex) => {
+                  const isBlackCell = char === '#';
+                  const { acrossClue, downClue } = findCluesForCell(rowIndex, colIndex);
+                  const isHighlighted = gameState.crossword.highlightedWord && 
+                    ((gameState.crossword.highlightedWord.direction === 'Хоризонтални' && acrossClue?.number === gameState.crossword.highlightedWord.number) ||
+                     (gameState.crossword.highlightedWord.direction === 'Вертикални' && downClue?.number === gameState.crossword.highlightedWord.number));
+                  const currentChar = gameState.crossword.gridState[rowIndex][colIndex];
+                  const correctChar = crosswordData.grid[rowIndex][colIndex];
+                  const isWrong = hintsEnabled && !isBlackCell && currentChar && currentChar !== correctChar && currentChar !== '';
+                  const isCorrectLocked = hintsEnabled && !isBlackCell && currentChar === correctChar && currentChar !== '';
+  
+                  const clueNumber = 
+                    (acrossClue?.start.row === rowIndex && acrossClue?.start.col === colIndex) ? acrossClue.number :
+                    (downClue?.start.row === rowIndex && downClue?.start.col === colIndex) ? downClue.number :
+                    null;
+  
+                  return (
+                    <div
+                      key={`${rowIndex}-${colIndex}`}
+                      className={`relative w-[4.7619vw] h-[4.7619vw] border border-black flex items-center justify-center ${
+                        isBlackCell ? 'bg-black' : isWrong ? 'bg-red-200' : isHighlighted ? 'bg-yellow-200' : 'bg-white'
+                      }`}
+                      {...(isTouchDevice
+                        ? {
+                            onTouchStart: (e) => handleTouchStart(e, rowIndex, colIndex),
+                            onTouchMove: (e) => handleTouchMove(e, rowIndex, colIndex),
+                            onTouchEnd: (e) => handleTouchEnd(e, rowIndex, colIndex),
+                          }
+                        : { onClick: (e) => handleClick(e, rowIndex, colIndex) })}
+                    >
+                      {!isBlackCell && (
+                        <>
+                          {clueNumber !== null && (
+                            <span className="absolute top-0 left-0 text-[min(0.6vw,12px)] text-gray-600">
+                              {clueNumber}
+                            </span>
+                          )}
+                          <input
+                            type="text"
+                            maxLength={1}
+                            value={currentChar === '#' || currentChar === undefined ? '' : currentChar}
+                            className="w-full h-full text-center uppercase border-none outline-none bg-transparent text-[min(3.5vw,42px)] font-bold caret-transparent text-black"
+                            ref={el => {
+                              if (el) cellRefs.current[`${rowIndex}-${colIndex}`] = el;
+                            }}
+                            onChange={(e) => !isCorrectLocked && handleCrosswordInput(e, rowIndex, colIndex)}
+                            onKeyDown={(e) => {
+                              if (isCorrectLocked) return;
+                              if (e.key === 'Backspace' && !e.currentTarget.value) {
+                                const prevCell = findPreviousCell(rowIndex, colIndex);
+                                if (prevCell) {
+                                  const prevRow = parseInt(prevCell.dataset.row!);
+                                  const prevCol = parseInt(prevCell.dataset.col!);
+                                  const newGridState = gameState.crossword.gridState.map((r, i) =>
+                                    i === prevRow ? r.map((c, j) => (j === prevCol ? '' : c ?? '')) : r
+                                  );
+                                  setGameState(prev => ({
+                                    ...prev,
+                                    crossword: { ...prev.crossword, gridState: newGridState },
+                                  }));
+                                  requestAnimationFrame(() => {
+                                    prevCell.focus(); // Use requestAnimationFrame for smoother transition
+                                  });
+                                }
+                              } else {
+                                e.currentTarget.select();
+                              }
+                            }}
+                            onFocus={(e) => {
+                              console.log(`Focused cell: ${rowIndex}-${colIndex}`);
+                            }}
+                            disabled={isCorrectLocked}
+                            data-row={rowIndex}
+                            data-col={colIndex}
+                          />
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
         </div>
       </div>
     );
@@ -404,7 +533,7 @@ export default function CrosswordAndConnectFour() {
 
   const renderClues = () => {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-base mt-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-base mt-4 text-black"> {/* Added text-black */}
         <div>
           <h3 className="font-bold">Хоризонтални</h3>
           {crosswordData.clues.across.map(clue => (
@@ -450,13 +579,13 @@ export default function CrosswordAndConnectFour() {
       const newSelected = gameState.connectFour.selectedWords.includes(word)
         ? gameState.connectFour.selectedWords.filter(w => w !== word)
         : [...gameState.connectFour.selectedWords, word];
-
+  
       if (newSelected.length === 4) {
         const category = gameState.connectFour.remainingWords.find(w => w.word === newSelected[0])?.category;
         const isCorrect = newSelected.every(w => 
           gameState.connectFour.remainingWords.find(rw => rw.word === w)?.category === category
         );
-
+  
         if (isCorrect) {
           setGameState(prev => ({
             ...prev,
@@ -483,7 +612,7 @@ export default function CrosswordAndConnectFour() {
         setGameState(prev => ({ ...prev, connectFour: { ...prev.connectFour, selectedWords: newSelected } }));
       }
     };
-
+  
     const handleShuffle = () => {
       setGameState(prev => ({
         ...prev,
@@ -493,9 +622,9 @@ export default function CrosswordAndConnectFour() {
         },
       }));
     };
-
+  
     return (
-      <div className="relative max-w-md mx-auto font-sans">
+      <div className="relative max-w-md mx-auto font-sans text-black">
         {gameState.connectFour.completedCategories.map(({ category, words }, index) => (
           <div
             key={index}
@@ -509,22 +638,45 @@ export default function CrosswordAndConnectFour() {
         ))}
         {gameState.connectFour.remainingWords.length > 0 && (
           <div className="grid grid-cols-4 gap-1">
-            {gameState.connectFour.remainingWords.map(({ word }) => (
-              <div
-                key={word}
-                className={`p-3 text-center text-sm font-bold uppercase rounded-full cursor-pointer transition-colors select-none ${
-                  gameState.connectFour.selectedWords.includes(word) ? 'bg-[#5A594E] text-white' : 'bg-[#EFEFE6] hover:bg-gray-200'
-                }`}
-                onClick={() => handleWordSelection(word)}
-              >
-                {word}
-              </div>
-            ))}
+            {gameState.connectFour.remainingWords.map(({ word }) => {
+              const isSelected = gameState.connectFour.selectedWords.includes(word);
+              const isTwoWords = word.includes(' ');
+              const wordsArray = isTwoWords ? word.split(' ') : [word];
+  
+              return (
+                <div
+                  key={word}
+                  ref={(el) => { wordRefs.current[word] = el; }}
+                  className={`p-3 text-center font-bold uppercase rounded-full cursor-pointer transition-colors select-none flex flex-col justify-center items-center ${
+                    isSelected ? 'bg-[#5A594E] text-white' : 'bg-[#EFEFE6] hover:bg-gray-200 text-black'
+                  }`}
+                  style={{
+                    minWidth: '60px',
+                    height: maxBoxHeight > 0 ? `${maxBoxHeight}px` : 'auto',
+                    maxWidth: '100%',
+                  }}
+                  onClick={() => handleWordSelection(word)}
+                >
+                  {wordsArray.map((w, index) => (
+                    <span
+                      key={index}
+                      className="block overflow-hidden whitespace-nowrap"
+                      style={{
+                        fontSize: w.length > 8 ? `${Math.max(10, 14 - (w.length - 8) * 1.5)}px` : '14px',
+                        lineHeight: '1.2',
+                      }}
+                    >
+                      {w}
+                    </span>
+                  ))}
+                </div>
+              );
+            })}
           </div>
         )}
         <div className="mt-4 text-center">
           <button
-            className="px-4 py-2 text-sm font-bold uppercase border border-gray-500 rounded bg-white hover:bg-gray-100 transition-colors select-none"
+            className="px-4 py-2 text-sm font-bold uppercase border border-gray-500 rounded bg-white hover:bg-gray-100 transition-colors select-none text-black"
             onClick={handleShuffle}
           >
             разбъркай
@@ -538,23 +690,22 @@ export default function CrosswordAndConnectFour() {
       </div>
     );
   };
-
   // -----------------------------------
   // MAIN RENDER
   // -----------------------------------
 
   return (
-    <div className="bg-white min-h-screen p-4 overflow-y-auto">
+    <div className="bg-white min-h-screen p-4 overflow-y-auto text-black"> {/* Added text-black */}
       <div className="relative flex mb-4">
         <div className="flex w-full">
           <button
-            className={`flex-1 p-2 ${gameState.currentGame === 'crossword' ? 'bg-blue-200' : 'bg-gray-100'} border border-black`}
+            className={`flex-1 p-2 ${gameState.currentGame === 'crossword' ? 'bg-blue-200' : 'bg-gray-100'} border border-black text-black`} // Added text-black
             onClick={() => setGameState(prev => ({ ...prev, currentGame: 'crossword' }))}
           >
             Кръстословица
           </button>
           <button
-            className={`flex-1 p-2 ${gameState.currentGame === 'connectFour' ? 'bg-blue-200' : 'bg-gray-100'} border border-black`}
+            className={`flex-1 p-2 ${gameState.currentGame === 'connectFour' ? 'bg-blue-200' : 'bg-gray-100'} border border-black text-black`} // Added text-black
             onClick={() => setGameState(prev => ({ ...prev, currentGame: 'connectFour' }))}
           >
             Connections
@@ -588,7 +739,7 @@ export default function CrosswordAndConnectFour() {
           </svg>
           {isSettingsOpen && (
             <div className="fixed inset-0 flex items-center justify-center z-30">
-              <div className="bg-white border border-gray-300 shadow-lg rounded-md w-96 p-4">
+              <div className="bg-white border border-gray-300 shadow-lg rounded-md w-96 p-4 text-black"> {/* Added text-black */}
                 {!isHintsOpen && !isPreviousPuzzlesOpen ? (
                   <ul className="text-gray-700">
                     <li
