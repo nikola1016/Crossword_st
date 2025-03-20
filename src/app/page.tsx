@@ -383,7 +383,6 @@ const handleCrosswordInput = (
     let touchStartTime: number | null = null;
     const swipeThreshold = 10;
     const tapTimeThreshold = 300;
-    const maxCols = 20;
   
     const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>, row: number, col: number) => {
       if (e.touches.length > 1) return;
@@ -436,10 +435,10 @@ const handleCrosswordInput = (
       <div className="flex justify-center">
         <div className="w-full">
           {crosswordData.grid.map((row, rowIndex) => {
-            const splitRow = row.split('').slice(0, maxCols);
-            console.log(`Row ${rowIndex} length: ${splitRow.length}, expected: ${maxCols}`);
-            if (splitRow.length !== maxCols) {
-              console.warn(`Row ${rowIndex} adjusted: ${splitRow} (original: ${row})`);
+            const splitRow = row.split('');
+            console.log(`Row ${rowIndex} length: ${splitRow.length}, expected: ${crosswordData.grid[rowIndex].length}`);
+            if (splitRow.length !== crosswordData.grid[rowIndex].length) {
+              console.warn(`Row ${rowIndex} mismatch: ${splitRow} vs ${crosswordData.grid[rowIndex]}`);
             }
             return (
               <div key={rowIndex} className="flex">
@@ -463,7 +462,7 @@ const handleCrosswordInput = (
                     <div
                       key={`${rowIndex}-${colIndex}`}
                       className={`relative w-[4.7619vw] h-[4.7619vw] border border-black flex items-center justify-center ${
-                        isBlackCell ? 'bg-black' : isWrong ? 'bg-red-200' : isHighlighted ? 'bg-yellow-200' : 'bg-white'
+                        isBlackCell ? 'bg-black' : isWrong ? 'bg-red-200' : isHighlighted ? 'bg-yellow-200' : isCorrectLocked ? 'bg-gray-200' : 'bg-white'
                       }`}
                       {...(isTouchDevice
                         ? {
@@ -484,13 +483,14 @@ const handleCrosswordInput = (
                             type="text"
                             maxLength={1}
                             value={currentChar === '#' || currentChar === undefined ? '' : currentChar}
-                            className="w-full h-full text-center uppercase border-none outline-none bg-transparent text-[min(3.5vw,42px)] font-bold caret-transparent text-black"
+                            className={`w-full h-full text-center uppercase border-none outline-none bg-transparent text-[min(3.5vw,42px)] font-bold caret-transparent text-black ${
+                              isCorrectLocked ? 'cursor-not-allowed opacity-75' : ''
+                            }`}
                             ref={el => {
                               if (el) cellRefs.current[`${rowIndex}-${colIndex}`] = el;
                             }}
-                            onChange={(e) => !isCorrectLocked && handleCrosswordInput(e, rowIndex, colIndex)}
+                            onChange={(e) => handleCrosswordInput(e, rowIndex, colIndex)} // Remove !isCorrectLocked check
                             onKeyDown={(e) => {
-                              if (isCorrectLocked) return;
                               if (e.key === 'Backspace' && !e.currentTarget.value) {
                                 const prevCell = findPreviousCell(rowIndex, colIndex);
                                 if (prevCell) {
@@ -503,18 +503,17 @@ const handleCrosswordInput = (
                                     ...prev,
                                     crossword: { ...prev.crossword, gridState: newGridState },
                                   }));
-                                  requestAnimationFrame(() => {
-                                    prevCell.focus(); // Use requestAnimationFrame for smoother transition
-                                  });
+                                  setTimeout(() => prevCell.focus(), 0);
                                 }
-                              } else {
+                              } else if (!isCorrectLocked) {
                                 e.currentTarget.select();
                               }
                             }}
                             onFocus={(e) => {
                               console.log(`Focused cell: ${rowIndex}-${colIndex}`);
+                              e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
                             }}
-                            disabled={isCorrectLocked}
+                            // Removed disabled={isCorrectLocked}
                             data-row={rowIndex}
                             data-col={colIndex}
                           />
